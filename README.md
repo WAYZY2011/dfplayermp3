@@ -1,0 +1,2 @@
+# dfplayermp3
+一个用dfplayermmini模块实现的袖珍mp3，可选的拓展模块实现更多功能
