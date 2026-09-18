@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DFPlayer Mini 袖珍 MP3 设计方案</title>
+<style>
+  :root{
+    --bg:#ffffff; --surface:#f7f7f5; --line:#e3e1dc; --ink:#1f1f1d;
+    --ink2:#5f5e5a; --accent:#0f6e56; --accent-bg:#e1f5ee; --amber:#854f0b; --amber-bg:#faeeda;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:32px 20px 64px;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;font-size:14px;line-height:1.75}
+  .wrap{max-width:860px;margin:0 auto}
+  h1{font-size:22px;font-weight:600;margin:0 0 6px}
+  .sub{color:var(--ink2);font-size:13px;margin:0 0 28px}
+  h2{font-size:17px;font-weight:600;margin:36px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+  h3{font-size:15px;font-weight:600;margin:22px 0 8px}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0;padding-left:22px}
+  li{margin:4px 0}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13px}
+  th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+  th{background:var(--surface);font-weight:600}
+  td code,p code,li code{background:var(--surface);padding:1px 5px;border-radius:4px;font-size:12px}
+  pre{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;
+    overflow-x:auto;font-size:12.5px;line-height:1.6;font-family:"SFMono-Regular",Consolas,monospace}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 18px;margin:14px 0}
+  .card.warn{background:var(--amber-bg);border-color:#e8d4a8}
+  .card.key{background:var(--accent-bg);border-color:#b9e0d2}
+  .tag{display:inline-block;background:var(--accent);color:#fff;border-radius:5px;
+    padding:1px 7px;font-size:11.5px;margin-right:6px}
+  .muted{color:var(--ink2);font-size:12.5px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:640px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>DFPlayer Mini 袖珍 MP3 设计方案</h1>
+<p class="sub">目标：锂电直供 · 3.5 mm 耳机输出 · 3 个按键操控全部功能 · 整机约 26×24×12 mm</p>
+
+<div class="card key">
+<p style="margin:0"><span class="tag">核心取舍</span>三个决定体积的选择：<b>不上升压芯片</b>（DFPlayer 3.2–5.5 V 宽压，锂电全程直供）、<b>用 DAC 直接推耳机</b>（不加功放）、<b>关机用 MOS 硬断电</b>（sleep 命令后模块仍耗十几毫安，小电池扛不住）。</p>
+</div>
+
+<h2>一、两条路线的选择</h2>
+
+<table>
+<tr><th style="width:110px">方案</th><th>做法</th><th>优点</th><th>代价</th></tr>
+<tr><td><b>A. 零 MCU</b><br><span class="muted">先出声</span></td>
+<td>DFPlayer 自带的 ADKEY1/ADKEY2 是电阻键盘口，每个口可挂多颗按键（不同阻值分压），模块固件直接识别，不用写一行代码。</td>
+<td>元件最少、体积最小、当天能响。</td>
+<td>长按/短按的含义由模块固件定死，不同批次有差异，<b>只能实机试出来</b>；做不了双击、组合键、拔耳机暂停。</td></tr>
+<tr><td><b>B. + 一颗 8 脚 MCU</b><br><span class="tag">推荐</span></td>
+<td>STC8G1K08A / CH32V003J4M6 之类 SOP-8 小 MCU，3 个按键各占 1 个 IO，手势在软件里译码，再用一根 TX 线给 DFPlayer 发串口命令。</td>
+<td>功能完全自定义，3 键能出 12 个功能，可加拔耳机暂停、低电量播报、睡眠定时。</td>
+<td>多一颗芯片 + 需要烧录器（STC 用 USB-TTL 即可）。</td></tr>
+</table>
+
+<p><b>建议节奏：</b>先按 A 焊一台把声音跑通（半小时内），确认 DAC 推耳机音量和底噪都满意，再补一颗 MCU 升级成 B。两版共用同一块板，只需预留 MCU 位置和飞线。</p>
+
+<h2>二、物料清单（BOM）</h2>
+
+<table>
+<tr><th style="width:150px">元件</th><th style="width:230px">型号 / 规格</th><th>说明</th></tr>
+<tr><td>主控模块</td><td>DFPlayer Mini（DFR0299 或兼容 FN-M16P）</td><td>约 22×21 mm。<b>买来先剪掉排针</b>，用漆包线飞焊，能省 4–5 mm 厚度。</td></tr>
+<tr><td>MCU</td><td>STC8G1K08A（SOP-8）</td><td>宽压 1.9–5.5 V，内部晶振，串口下载。备选：CH32V003J4M6（需 WCH-LinkE）、ATtiny85（需 ISP）。</td></tr>
+<tr><td>电池</td><td>锂聚合物 401230（120 mAh）/ 602040（500 mAh）</td><td>120 mAh ≈ 6 h；500 mAh ≈ 20 h。体积与续航二选一，推荐 302530 级别折中。</td></tr>
+<tr><td>充电 + 保护</td><td>TP4056（SOP-8）+ DW01 + 8205A，或成品微型充电板</td><td>成品板带 Micro-USB 座较占地方；想压体积就把三个芯片画在自己板上 + 一个 6 脚 Type-C 母座。</td></tr>
+<tr><td>电源开关</td><td>AO3401A（P-MOS，SOT-23）+ AO3400（N-MOS）+ 2×1N4148</td><td>软自锁开关，关机后静态电流接近 0。</td></tr>
+<tr><td>耳机座</td><td>PJ-320D（带检测脚 5 脚款）</td><td>3.5 mm 立体声座里体积最小的常见方案；检测脚用于拔耳机自动暂停。</td></tr>
+<tr><td>按键</td><td>3×4×2 mm 贴片轻触 ×3</td><td>也可用 2 颗（K1/K3）+ 1 颗侧边，看外壳手感。</td></tr>
+<tr><td>电容</td><td>100 µF + 100 nF（电源去耦）；耳机串 100–220 µF</td><td>耳机隔直电容见下文「坑 3」，可先直连试。</td></tr>
+<tr><td>TF 卡</td><td>≤32 GB，FAT32</td><td>老批次模块不认 exFAT / &gt;32 GB。</td></tr>
+</table>
+
+<h2>三、硬件关键电路</h2>
+
+<h3>1. 供电：锂电直供</h3>
+<p>电池正极 → DW01 保护 → TP4056 输出 → <b>AO3401 P-MOS 高边开关</b> → 系统 VCC（给 DFPlayer 和 MCU）。整机工作电压 3.0–4.2 V。</p>
+<p class="muted">DFPlayer 标称 3.2–5.5 V，实测 3.3 V 以上稳定，锂电放到 3.4 V 就该提醒充电了（MCU 用 ADC 采样，低于阈值播报一次低电量）。</p>
+
+<h3>2. 软自锁开关（长按开机 / 长按关机）</h3>
+<pre>       电池+ ──────────┬───────────── VCC_SYS
+                       │
+              ┌────────┴────────┐
+              │  AO3401 (P-MOS) │  S=电池+  D=VCC_SYS
+              └────────┬────────┘
+                       │ G
+              100k ────┼──── 上拉到 S（默认关断）
+                       │
+        K2 ────&gt;|──────┤       二极管 D1：按键按下把 G 拉低 → MOS 导通 → 上电
+                       │
+              ┌────────┴────────┐
+              │  AO3400 (N-MOS) │  D=G  S=GND
+              └────────┬────────┘
+                       │ G ← MCU "PS_HOLD"（串联 100k 下拉）
+                       │
+ MCU 上电后立即把 PS_HOLD 拉高 → N-MOS 导通 → 持续拉低 G → 松开按键也不掉电
+ 关机：MCU 把 PS_HOLD 拉低 → N-MOS 关断 → G 被 100k 上拉 → 断电</pre>
+<p>K2 同时是「播放/暂停」功能键：它的一端接地，另一端既接 D1 阳极，也接 MCU 的一个带上拉的输入脚。开机后 MCU 读这个脚做手势识别，长按 1.2 s 判为开关机。</p>
+
+<h3>3. 按键接法：优先独立 IO，不要急着用 ADC</h3>
+<p>3 个按键各占一个 MCU IO（内部上拉，按下接地）。理由：电阻键盘里两键同按是<b>并联</b>关系，阻值容易和单键档位撞车，双击/组合键会变得不可靠。若 MCU 引脚实在不够，再退回 ADC 电阻链，并按下面选值（VCC 作 ADC 基准，读数与电池电压无关）：</p>
+<pre>上拉 10 kΩ 到 VCC，按键经各自电阻接地：
+  K1 = 1.5 kΩ  → 0.13 × VCC
+  K2 = 5.1 kΩ  → 0.34 × VCC
+  K3 = 20  kΩ  → 0.67 × VCC
+  无按键      → 1.00 × VCC
+注意 K1 不要用 0 Ω 直连地，否则会把所有组合键吞掉。
+</pre>
+<p class="muted">若走路线 A（零 MCU 的 ADKEY 方案），官方手册给出的阻值阶梯是：0 / 3 / 6.2 / 9.1 / 15 / 24 / 33 / 51 / 100 / 200 kΩ。哪个阻值对应哪个功能以手册 Figure 4.5 为准（不同固件批次有出入），别照抄网络博客的对应关系。</p>
+
+<h3>4. 音频输出</h3>
+<p>DAC_L / DAC_R 各串一颗隔直电容后接耳机座左右声道，耳机座地接模块 GND。<b>不要用 SPK_1/SPK_2</b>，那是内置功放输出，接耳机又吵又失真。</p>
+
+<h3>5. 耳机插入检测</h3>
+<p>PJ-320D 的检测脚在未插入时与声道脚短路、插入后断开。检测脚接 MCU 输入（内部上拉），读到变化即触发：<b>拔耳机 → 暂停 + 5 s 后自动关机</b>，这是最省电的交互。</p>
+
+<h2>四、按键手势映射（3 键 → 12 功能）</h2>
+
+<table>
+<tr><th style="width:110px">手势</th><th>K1 左</th><th>K2 中</th><th>K3 右</th></tr>
+<tr><td><b>单击</b></td><td>上一曲</td><td>播放 / 暂停</td><td>下一曲</td></tr>
+<tr><td><b>双击</b></td><td>上一个文件夹</td><td>循环模式切换</td><td>下一个文件夹</td></tr>
+<tr><td><b>长按 1.2 s</b></td><td>音量 −（连发）</td><td>开机 / 关机</td><td>音量 +（连发）</td></tr>
+<tr><td><b>双键组合</b></td><td>K1+K2 电量播报</td><td>K1+K3 音效 EQ</td><td>K2+K3 睡眠定时</td></tr>
+</table>
+
+<p class="muted">单击判定：按下后 250 ms 内没有第二次按下即触发单击，响应最快；双击窗口 250 ms。长按到 1.2 s 先触发一次动作，之后每 200 ms 连发一次（音量）。</p>
+
+<div class="card">
+<p style="margin:0"><b>如果想压到 2 个键：</b>K1 单击上一曲 / 双击音量− / 长按开关机；K2 单击播放暂停 / 双击下一曲 / 长按音量+。功能砍到 6 个，但面板更干净。1 个键的方案（单击/双击/三击/长按四层）不建议——误触率太高。</p>
+</div>
+
+<h2>五、固件要点</h2>
+
+<h3>DFPlayer 串口帧</h3>
+<pre>7E FF 06 CMD 00 DATA_H DATA_L EF
+校验和 = 0 - (FF + 06 + CMD + 00 + DATA_H + DATA_L)，取低字节
+
+void send(uint8_t cmd, uint16_t arg){
+  uint8_t f[10] = {0x7E,0xFF,0x06,cmd,0x00,arg>>8,arg&0xFF,0x00,0x00,0xEF};
+  uint16_t sum = 0;
+  for(int i=1;i&lt;7;i++) sum += f[i];
+  f[7] = -(sum >> 8); f[8] = -(sum & 0xFF);   // 校验高低字节
+  for(int i=0;i&lt;10;i++) uart_put(f[i]);
+  delay_ms(20);   // 命令间留间隔，连续发会丢帧
+}</pre>
+
+<h3>常用命令（以手上模块的 datasheet 为准）</h3>
+<table>
+<tr><th style="width:70px">CMD</th><th>功能</th><th style="width:70px">CMD</th><th>功能</th></tr>
+<tr><td>0x01</td><td>下一曲</td><td>0x0D</td><td>播放</td></tr>
+<tr><td>0x02</td><td>上一曲</td><td>0x0E</td><td>暂停</td></tr>
+<tr><td>0x03</td><td>指定曲目号（1–2999）</td><td>0x0F</td><td>指定文件夹播放</td></tr>
+<tr><td>0x06</td><td>设定音量（0–30）</td><td>0x11</td><td>全曲循环</td></tr>
+<tr><td>0x07</td><td>音效 EQ（0–5）</td><td>0x19</td><td>单曲循环</td></tr>
+<tr><td>0x09</td><td>音源（2 = TF 卡）</td><td>0x18</td><td>随机播放</td></tr>
+<tr><td>0x0A</td><td>休眠（仍有耗电，慎用）</td><td>0x0C</td><td>复位模块</td></tr>
+</table>
+
+<h3>手势状态机骨架</h3>
+<pre>每 5 ms 扫描一次按键，记录：press_ms、release_gap、click_count
+
+on_release(k):
+  if press_ms &gt;= 1200:      long_press(k)          // 音量连发 / 开关机
+  else:
+    click_count[k]++
+    start 250ms timer                               // 等待是否还有第二击
+
+on_timer_expire(k):
+  if click_count[k] == 1: single(k)
+  if click_count[k] == 2: double(k)
+  click_count[k] = 0
+
+// 组合键：两个键的按下时间窗重叠 &gt; 60ms 且都未超时 → combo(k1,k2)
+// 组合键要在单击计时器到期前判定，否则会被拆成两次单击</pre>
+
+<h3>上电初始化序列（顺序不能乱）</h3>
+<ol>
+<li>拉高 PS_HOLD 保持供电（第一件事，晚了会掉电）</li>
+<li>延时 500 ms 等模块内部初始化</li>
+<li><code>send(0x09, 2)</code> 选 TF 卡为音源</li>
+<li><code>send(0x06, vol)</code> 设音量——<b>模块不记忆音量</b>，每次上电默认 20，太吵</li>
+<li>读 ADC 判断电量，低于 3.4 V 播报低电量提示音（预录一段 MP3，用 0x13 插播）</li>
+</ol>
+
+<h2>六、TF 卡文件组织</h2>
+<div class="card warn">
+<p style="margin:0"><b>最大的坑：播放顺序按文件写入 FAT 表的物理顺序，不是文件名字典序。</b>你在电脑上排好序再拷进去，播放出来照样乱。解决办法二选一：① 拷完用专用工具（如 FAT Sorter / DFPlayer 排序工具）重排；② 不依赖顺序，按「文件夹 + 曲号」用 0x0F 指定播放。</p>
+</div>
+<ul>
+<li>目录结构：<code>/01/001.mp3</code>、<code>/01/002.mp3</code>… 文件夹名两位数字，文件名三位数字</li>
+<li>格式化 FAT32，≤32 GB，分配单元用默认</li>
+<li>MP3 编码 128–192 kbps、44.1 kHz 即可，码率越高解码耗电略增</li>
+<li>提示音（低电量、开关机）单独放一个文件夹，用插播命令播放，不打断当前曲目号</li>
+</ul>
+
+<h2>七、结构与堆叠</h2>
+<div class="grid">
+<div class="card">
+<b>板层安排</b>
+<ul style="margin-bottom:0">
+<li>主板 24×22 mm 双面：正面 MCU + 按键 + 阻容</li>
+<li>背面直接贴 DFPlayer（剪掉排针后用漆包线连 VCC/GND/TX/DAC_L/DAC_R/BUSY 六根线即可）</li>
+<li>电池叠在 DFPlayer 上方，中间垫一层青稞纸绝缘</li>
+<li>耳机座在一端，Type-C 在另一端</li>
+</ul>
+</div>
+<div class="card">
+<b>外壳三档</b>
+<ul style="margin-bottom:0">
+<li><b>最快：</b>热缩管包裹 + 热熔胶固定，按键处开孔</li>
+<li><b>推荐：</b>3D 打印两片对扣壳（壁厚 0.8 mm），按键做在壳上再用顶针压到 PCB 焊盘</li>
+<li><b>最省事：</b>买现成 ABS 小仪表盒（约 30×25×15 mm）改孔</li>
+</ul>
+</div>
+</div>
+<p>成品目标：<b>26 × 24 × 12 mm，约 8 g（含 120 mAh 电池）</b>，比一节 5 号电池还小一半，可以夹在衣领或挂绳上。</p>
+
+<h2>八、必踩的坑与对策</h2>
+<table>
+<tr><th style="width:40px">#</th><th style="width:190px">现象</th><th>原因与对策</th></tr>
+<tr><td>1</td><td>关机后几天电池就没电</td><td>模块 sleep 后仍耗十几毫安。必须 MOS 硬断，或电池正极串物理拨动开关。</td></tr>
+<tr><td>2</td><td>音量每次开机都跳回很大声</td><td>模块不记忆音量。上电后立刻发 0x06 设成你存的值（建议存 MCU 内部 EEPROM）。</td></tr>
+<tr><td>3</td><td>插耳机有爆音 / 低频发闷</td><td>串 100–220 µF 隔直（16 Ω 耳机配 10 µF 会把低频砍掉一半，别贪小）。先直连试，有直流偏置再补电容。</td></tr>
+<tr><td>4</td><td>播放有嘶嘶底噪</td><td>VCC 并 100 µF + 100 nF；DAC 走线远离电池和充电回路；充电时别听歌（TP4056 的开关噪声会串进来）。</td></tr>
+<tr><td>5</td><td>连续发命令丢动作</td><td>每帧之间留 20 ms 以上；模块还要读卡，密集命令会溢出缓冲区。</td></tr>
+<tr><td>6</td><td>曲目顺序乱</td><td>见第六节，FAT 物理顺序问题。</td></tr>
+<tr><td>7</td><td>低压时反复重启</td><td>大音量 + 低电量时电池内阻压降大。MCU 检测低于 3.4 V 就限音量并提示充电，3.2 V 强制关机。</td></tr>
+<tr><td>8</td><td>卡不识别</td><td>换 FAT32 重新格式化，容量降到 32 GB 以内；部分兼容模块对品牌卡挑食，换张闪迪/三星试。</td></tr>
+</table>
+
+<h2>九、单板化：用嘉立创做成一整块板</h2>
+
+<p>完全可以做。区别在于 DFPlayer 是<b>模块焊死</b>还是<b>芯片上板</b>。</p>
+
+<table>
+<tr><th style="width:130px">做法</th><th>说明</th><th>成品厚度</th><th>风险</th></tr>
+<tr><td><b>模块焊死版</b><br><span class="tag">先做这个</span></td>
+<td>自己画 24×22 mm 主板，DFPlayer 模块剪掉排针后直接焊在板上预留的焊盘阵列（只连 VCC / GND / TX / DAC_L / DAC_R / BUSY 六根）。出来就是一整块，没有一根飞线。</td>
+<td>约 12 mm<br><span class="muted">卡在模块和 TF 卡座的高度</span></td>
+<td>极低。解码、卡座、LDO 都由模块保证，你只负责外围。</td></tr>
+<tr><td><b>芯片级单板版</b><br><span class="muted">第二版</span></td>
+<td>把 DFPlayer 的主控 <b>YX5200-24SS（SSOP-24）</b> 直接画在自己板上，外围只需十几个阻容 + 3.3 V LDO + TF 卡座。全贴片，可走嘉立创 SMT。</td>
+<td>约 6–8 mm<br><span class="muted">瓶颈变成电池厚度</span></td>
+<td>中。VDD / VCOM / DACVSS 的电容接法必须照 datasheet 典型应用图，自己猜大概率不出声。</td></tr>
+</table>
+
+<h3>YX5200-24SS 管脚定义</h3>
+<pre> 1 DACL      7 RX      13 GPIOA3   19 GPIOB2
+ 2 DACR      8 AUXL    14 GPIOA4   20 GPIOB1
+ 3 VDDIO     9 AUXR    15 GPIOA5   21 GPIOB0
+ 4 VDD      10 GPIOA0  16 GPIOA6   22 NC
+ 5 VSS      11 GPIOA1  17 GPIOB4   23 VCOM
+ 6 TX       12 GPIOA2  18 GPIOB3   24 DACVSS
+
+供电 3.3–5 V，工作电流约 15 mA；DAC 为 24 bit 输出；UART 9600 bps。
+官方手册 Figure 4.3：耳机串 100 Ω 限流电阻后直连 DAC_L / DAC_R。</pre>
+
+<div class="card warn">
+<p style="margin:0"><b>省事的做法：别从零画。</b>去嘉立创开源广场 / 立创商城搜「YX5200」「MH2024K」「MP3 解码模块」，通常能找到现成工程和 datasheet 下载，直接 fork 改板比自己啃 datasheet 快得多。这颗芯片的中文资料只有简版手册，外围参数是社区试出来的。</p>
+</div>
+
+<h3>贴片化选型（决定能不能走 SMT）</h3>
+<table>
+<tr><th style="width:120px">位号</th><th style="width:210px">选型</th><th>备注</th></tr>
+<tr><td>解码</td><td>YX5200-24SS，SSOP-24</td><td>先确认立创商城有货，兼容型号 MH2024K-24SS / JC-M16P</td></tr>
+<tr><td>MCU</td><td>STC8G1K08A，SOP-8</td><td>串口下载，烧录不用额外买编程器</td></tr>
+<tr><td>3.3 V LDO</td><td>ME6211C33 / XC6206P332，SOT-23</td><td><b>必须选低压差</b>。15 mA 负载下压差只有几十毫伏，锂电能放到 3.3 V 才掉出稳压；普通 LDO 会在 3.6 V 就歇菜</td></tr>
+<tr><td>充电</td><td>TP4054 / LP4054，SOT-23-5</td><td>PROG 电阻取 10 kΩ ≈ 100 mA，以手册公式为准</td></tr>
+<tr><td>电池保护</td><td>XB8089D，SOT-23-5</td><td>DW01 + MOS 二合一，比 DW01+8205A 两颗省一半地方</td></tr>
+<tr><td>电源开关</td><td>AO3401A + AO3400A + 2×1N4148</td><td>SOT-23 / SOD-123，均为贴片</td></tr>
+<tr><td>TF 卡座</td><td>贴片自弹式 microSD 卡座</td><td>别选插件款，插件款会顶高整机</td></tr>
+<tr><td>耳机座</td><td>贴片 3.5 mm 座，或插件款后焊</td><td>贴片款在立创搜「3.5mm 音频座 贴片」；找不到就插件后焊</td></tr>
+<tr><td>Type-C</td><td>6P 贴片母座</td><td>CC1/CC2 各接 5.1 kΩ 下拉，否则部分充电头不输出</td></tr>
+<tr><td>阻容</td><td>0603 为主</td><td>0402 更省地方但手焊难受；SMT 两种都能贴</td></tr>
+<tr><td>电池</td><td>带线锂电，焊 B+/B− 焊盘</td><td>唯一必须手焊的件，SMT 完成后自己点上去</td></tr>
+</table>
+
+<h3>嘉立创下单参数</h3>
+<ul>
+<li><b>EDA：</b>嘉立创 EDA 专业版。画 2 层板，尺寸 24×22 mm</li>
+<li><b>板厚：</b>选 1.0 mm（省厚度）。要更结实就 1.6 mm</li>
+<li><b>工艺：</b>FR-4、有铅喷锡即可，SSOP-24 的 0.65 mm 间距不需要沉金</li>
+<li><b>拼板：</b>24×22 mm 在 100×100 mm 里能排 4×4 = 16 块，用 V-CUT 或邮票孔拼。<b>把模块版和芯片版拼在同一张单子里</b>，一次打样两种都试</li>
+<li><b>打样费：</b>10×10 cm 内 2 层板通常有免费额度（每月 2 次），超出也只要二三十块。具体以当时活动为准</li>
+<li><b>SMT：</b>贴片元件需从立创商城下单且有基础库封装。费用 = 工程费（几十元/款）+ 点数费（约 60–80 个焊点，几乎可忽略）。做 5 片的话贴片费摊下来每片十几元</li>
+</ul>
+
+<h3>成本估算（做 5 片）</h3>
+<table>
+<tr><th style="width:130px">项目</th><th>金额</th></tr>
+<tr><td>PCB 打样</td><td>¥0–30（走免费额度）</td></tr>
+<tr><td>单板 BOM</td><td>¥13–18 / 片（YX5200 ¥3–6，其余都是毛票）</td></tr>
+<tr><td>SMT 贴片</td><td>¥60–80 总额（含工程费），摊 ¥12–16 / 片</td></tr>
+<tr><td>电池 + TF 卡</td><td>¥10–20 / 片</td></tr>
+<tr><td><b>合计</b></td><td><b>约 ¥35–55 / 片</b>（5 片起做）</td></tr>
+</table>
+
+<div class="card key">
+<p style="margin:0"><b>建议的两版节奏：</b>第一版打「模块焊死版」，手焊就行，当天出声，用来验证体积、按键手感、音量和续航；确认没问题后第二版直接上「芯片级单板 + 嘉立创 SMT」，把厚度压到 8 mm 以内。两版的 MCU 固件完全通用，不用重写。</p>
+</div>
+
+<h2>十、动手顺序</h2>
+<ol>
+<li><b>先裸机验声：</b>DFPlayer + TF 卡 + 锂电池 + 耳机座，ADKEY 接两颗电阻键，确认出声、音量可接受。</li>
+<li><b>加电源自锁：</b>焊 P-MOS/N-MOS/二极管，用飞线验证长按开机、拉低关机。</li>
+<li><b>插 MCU：</b>先只实现单击三键（上一曲/播放暂停/下一曲），跑通串口协议。</li>
+<li><b>补手势：</b>双击、长按、组合键，加耳机检测自动暂停。</li>
+<li><b>画板：</b>按第七节尺寸布板，DFPlayer 用排母或直接焊死。</li>
+<li><b>做壳：</b>先热缩管，满意了再 3D 打印。</li>
+</ol>
+
+<p class="muted" style="margin-top:32px">方案文档 · 生成于 2026-09-18 · 命令码与 ADKEY 映射请以手上模块的实际 datasheet 为准</p>
+
+</div>
+</body>
+</html>
